@@ -28,7 +28,7 @@
 </head>
 <body>
 <main class="app">
-  <header class="top"><div class="brand"><span class="pix p-win"></span><div class="logoText">ALL OF NAIVE<span class="version">v1.3.1</span></div></div><button class="lang" id="langBtn">RU</button></header>
+  <header class="top"><div class="brand"><span class="pix p-win"></span><div class="logoText">ALL OF NAIVE<span class="version">v1.3.2</span></div></div><button class="lang" id="langBtn">RU</button></header>
   <div class="content">
     <section class="screen show" id="subScreen">
       <article class="xp"><div class="xp-title"><span class="pix p-key"></span><span class="xp-name">all_of_naive.exe</span><span class="controls"><i class="ctrl">_</i><i class="ctrl">□</i><i class="ctrl close">×</i></span></div><div class="xp-body"><img class="hero-banner" src="assets/banner.jpg" alt="All of Naive"><div class="naive-label">All of Naive</div><div class="hero-list" id="heroList"></div></div></article>
@@ -47,9 +47,9 @@ const qs=s=>document.querySelector(s); const BOT_USERNAME='AllOfNaive_bot';
 const API_DEFAULT='https://all-of-naive-backend-production-08b1.up.railway.app';
 const API_FROM_URL=new URLSearchParams(location.search).get('api');
 if(API_FROM_URL){localStorage.setItem('AON_API_BASE', API_FROM_URL.replace(/\/$/,''));}
-let API_CACHED = localStorage.getItem('AON_API_BASE') || '';
+let API_CACHED=localStorage.getItem('AON_API_BASE')||'';
 if(!API_FROM_URL && (!API_CACHED || API_CACHED.includes('onrender.com') || API_CACHED.includes('localhost') || API_CACHED.includes('127.0.0.1') || API_CACHED.includes('153.80.246.80'))){
-  API_CACHED = API_DEFAULT;
+  API_CACHED=API_DEFAULT;
   localStorage.setItem('AON_API_BASE', API_DEFAULT);
 }
 const API_BASE=(API_FROM_URL || API_CACHED || API_DEFAULT).replace(/\/$/,'');
@@ -66,30 +66,55 @@ function renderPlans(){qs('#plans').innerHTML=['m1','m3','m6','forever'].map(id=
 function updatePrice(){qs('#bigPrice').textContent=money(finalPrice()); const benefit=calcBenefit(selected); const d=promoDiscount||benefit; const badge=qs('#discountBadge'); badge.classList.add('show'); badge.textContent=(promoDiscount?L[lang].discount:L[lang].benefit)+' '+d+'%'}
 function applyText(){qs('#langBtn').textContent=L[lang].lang; qs('#buyLaunchText').textContent=L[lang].buyLaunch; qs('#subTabText').textContent=L[lang].subTab; qs('#profileTabText').textContent=L[lang].profileTab; qs('#profileHeader').textContent=L[lang].profileHeader; qs('#profileSub').textContent=L[lang].profileSub; qs('#pfLbl1').textContent=L[lang].pf1; qs('#pfLbl2').textContent=L[lang].pf2; qs('#pfLbl3').textContent=L[lang].pf3; qs('#pfLbl4').textContent=L[lang].pf4; qs('#pfPlan').textContent=L[lang].pfPlan; qs('#pfStatus').textContent=L[lang].pfStatus; qs('#buyWindowTitle').textContent=L[lang].buyWindow; qs('#modalLead').textContent=L[lang].modalLead; qs('#promo').placeholder=L[lang].promoPlaceholder; qs('#agreeText').textContent=L[lang].agree; qs('#sumNote').textContent=L[lang].sum; qs('#yooText').textContent=L[lang].payRub; qs('#cryptoText').textContent=L[lang].payCrypto; qs('#trialText').textContent=L[lang].trial; qs('#legalText').innerHTML=L[lang].legal; renderHero(); renderPlans()}
 async function loadPlans(){ if(!API_BASE) return; try{const r=await fetch(API_BASE+'/api/plans'); const arr=await r.json(); arr.forEach(p=>{if(plans[p.id]) plans[p.id].price=p.price_rub}); renderPlans()}catch(e){}}
-async function checkPromo(){const code=qs('#promo').value.trim().toUpperCase(); promoCode=code; qs('#promoMsg').textContent=''; if(!code){promoDiscount=0; updatePrice(); return} if(API_BASE){try{const r=await fetch(API_BASE+'/api/promo/check?code='+encodeURIComponent(code)); const j=await r.json(); if(j.ok){promoDiscount=j.discount_percent; qs('#promoMsg').style.color='#0b7f00'; qs('#promoMsg').textContent=L[lang].promoOk+': -'+promoDiscount+'%'} else {promoDiscount=0; qs('#promoMsg').style.color='#b40000'; qs('#promoMsg').textContent=L[lang].noPromo} updatePrice(); return}catch(e){}} promoDiscount=0; updatePrice(); qs('#promoMsg').style.color='#7a5200'; qs('#promoMsg').textContent=lang==='ru'?'Промокод проверится ботом при оплате':'Промокод перевірить бот під час оплати'}
+async function checkPromo(){
+  const code=qs('#promo').value.trim().toUpperCase();
+  promoCode=code;
+  qs('#promoMsg').textContent='';
+  if(!code){promoDiscount=0; updatePrice(); return}
+  if(API_BASE){
+    try{
+      let r=await fetch(API_BASE+'/api/promo/check?code='+encodeURIComponent(code), {method:'GET', mode:'cors', credentials:'omit'});
+      if(!r.ok) r=await fetch(API_BASE+'/api/promocodes/check?code='+encodeURIComponent(code), {method:'GET', mode:'cors', credentials:'omit'});
+      const j=await r.json();
+      const ok = j.ok===true || j.valid===true;
+      const discount = Number(j.discount_percent || j.discount || j.percent || 0);
+      if(ok && discount>0){
+        promoDiscount=discount;
+        qs('#promoMsg').style.color='#0b7f00';
+        qs('#promoMsg').textContent=L[lang].promoOk+': -'+promoDiscount+'%';
+      } else {
+        promoDiscount=0;
+        qs('#promoMsg').style.color='#b40000';
+        qs('#promoMsg').textContent=L[lang].noPromo;
+      }
+      updatePrice();
+      return;
+    }catch(e){
+      console.error('PROMO_ERROR', e);
+    }
+  }
+  promoDiscount=0;
+  updatePrice();
+  qs('#promoMsg').style.color='#7a5200';
+  qs('#promoMsg').textContent=lang==='ru'?'Промокод проверится при оплате':'Промокод перевіриться під час оплати';
+}
 function openBotFallback(action,payload={}){const provider=payload.provider||'yookassa'; const promo=(payload.promo||'').trim(); const startArg=action==='trial'?'trial':`buy_${selected}_${provider}${promo?`_promo_${encodeURIComponent(promo)}`:''}`; const url=`https://t.me/${BOT_USERNAME}?start=${startArg}`; toast(L[lang].openBot); setTimeout(()=>{if(tg?.openTelegramLink)tg.openTelegramLink(url);else location.href=url},350)}
 async function send(action,extra={},close=true){
   const payload={action,plan_id:selected,promo:qs('#promo').value.trim(),...extra};
-  if(close) closeModal();
 
   if(action==='trial'){
-    if(API_BASE && tg?.initData){
-      try{
-        toast(L[lang].sent);
-        await fetch(API_BASE+'/api/trial',{
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({initData:tg.initData})
-        });
-        return;
-      }catch(e){}
-    }
+    if(close) closeModal();
     openBotFallback(action,payload);
     return;
   }
 
+  if(!agree){
+    toast(lang==='ru'?'поставь галочку оферты.exe':'постав галочку оферти.exe');
+    return;
+  }
+
   if(!tg?.initData){
-    toast(lang==='ru'?'Открой приложение через новую кнопку /start в Telegram':'Відкрий застосунок через нову кнопку /start у Telegram');
+    toast(lang==='ru'?'открой через новую кнопку /start в Telegram':'відкрий через нову кнопку /start у Telegram');
     return;
   }
 
@@ -101,45 +126,64 @@ async function send(action,extra={},close=true){
   try{
     toast(lang==='ru'?'создаю платеж.exe':'створюю платіж.exe');
 
-    const body = {
-      initData: tg.initData,
-      plan_id: selected,
-      provider: payload.provider || 'yookassa',
-      promo: payload.promo || null,
-      accepted_legal: agree === true
+    const body={
+      initData:tg.initData,
+      plan_id:selected,
+      provider:payload.provider || 'yookassa',
+      promo:payload.promo || null,
+      accepted_legal:true
     };
 
-    const r = await fetch(API_BASE + '/api/payments/create', {
-      method:'POST',
-      mode:'cors',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify(body)
-    });
-
-    let j = {};
-    const txt = await r.text();
-    try{ j = txt ? JSON.parse(txt) : {}; }catch(_){ j = {raw:txt}; }
-
-    if(!r.ok || j.ok === false){
-      throw new Error(j.detail || j.error || j.message || ('HTTP '+r.status));
+    async function postJson(url){
+      const res=await fetch(url,{
+        method:'POST',
+        mode:'cors',
+        credentials:'omit',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(body)
+      });
+      const text=await res.text();
+      let data={};
+      try{data=text?JSON.parse(text):{};}catch(e){data={raw:text};}
+      return {res,data,text};
     }
 
-    const checkout = j.checkout_url || j.url || j.payment_url || j.pay_url;
+    let out;
+    try{
+      out=await postJson(API_BASE+'/api/payments/create');
+    }catch(networkErr){
+      console.error('PAYMENT_NETWORK_ERROR_MAIN', networkErr);
+      // second try with trailing slash, sometimes routers/proxies differ
+      out=await postJson(API_BASE+'/api/payments/create/');
+    }
+
+    const res=out.res, j=out.data;
+
+    if(!res.ok || j.ok===false){
+      const msg=j.detail || j.error || j.message || j.raw || ('HTTP '+res.status);
+      throw new Error(msg);
+    }
+
+    const checkout=j.checkout_url || j.url || j.payment_url || j.pay_url || j.confirmation_url;
     if(!checkout){
       throw new Error('backend_no_checkout_url');
     }
 
+    if(close) closeModal();
     toast(lang==='ru'?'платеж создан.exe':'платіж створено.exe');
 
     setTimeout(()=>{
-      if(tg?.openLink) tg.openLink(checkout);
-      else window.open(checkout, '_blank');
-    }, 350);
+      try{
+        if(tg?.openLink) tg.openLink(checkout);
+        else window.open(checkout,'_blank');
+      }catch(e){
+        location.href=checkout;
+      }
+    },350);
 
   }catch(e){
     console.error('PAYMENT_ERROR', e);
-    toast((lang==='ru'?'ошибка оплаты: ':'помилка оплати: ') + (e.message || 'failed'));
-    // Не отправляем старый fallback в бота — он маскировал настоящую ошибку и из-за этого было непонятно, что сломано.
+    toast((lang==='ru'?'ошибка оплаты: ':'помилка оплати: ')+(e.message || 'failed'));
   }
 }
 function openModal(){qs('#buyModal').classList.remove('hide'); qs('#buyModal').classList.add('show')}function closeModal(){const m=qs('#buyModal'); if(!m.classList.contains('show'))return; m.classList.add('hide'); setTimeout(()=>{m.classList.remove('show','hide')},240)}
