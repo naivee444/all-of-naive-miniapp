@@ -28,7 +28,7 @@
 </head>
 <body>
 <main class="app">
-  <header class="top"><div class="brand"><span class="pix p-win"></span><div class="logoText">ALL OF NAIVE<span class="version">v1.3</span></div></div><button class="lang" id="langBtn">RU</button></header>
+  <header class="top"><div class="brand"><span class="pix p-win"></span><div class="logoText">ALL OF NAIVE<span class="version">v1.3.1</span></div></div><button class="lang" id="langBtn">RU</button></header>
   <div class="content">
     <section class="screen show" id="subScreen">
       <article class="xp"><div class="xp-title"><span class="pix p-key"></span><span class="xp-name">all_of_naive.exe</span><span class="controls"><i class="ctrl">_</i><i class="ctrl">□</i><i class="ctrl close">×</i></span></div><div class="xp-body"><img class="hero-banner" src="assets/banner.jpg" alt="All of Naive"><div class="naive-label">All of Naive</div><div class="hero-list" id="heroList"></div></div></article>
@@ -44,10 +44,15 @@
 <script>
 const tg=window.Telegram?.WebApp; tg?.ready(); tg?.expand(); tg?.setHeaderColor?.('#172331'); tg?.setBackgroundColor?.('#0057b6');
 const qs=s=>document.querySelector(s); const BOT_USERNAME='AllOfNaive_bot';
-const API_DEFAULT='https://all-of-naive-backend.onrender.com';
+const API_DEFAULT='https://all-of-naive-backend-production-08b1.up.railway.app';
 const API_FROM_URL=new URLSearchParams(location.search).get('api');
 if(API_FROM_URL){localStorage.setItem('AON_API_BASE', API_FROM_URL.replace(/\/$/,''));}
-const API_BASE=(API_FROM_URL || localStorage.getItem('AON_API_BASE') || API_DEFAULT).replace(/\/$/,'');
+let API_CACHED = localStorage.getItem('AON_API_BASE') || '';
+if(!API_FROM_URL && (!API_CACHED || API_CACHED.includes('onrender.com') || API_CACHED.includes('localhost') || API_CACHED.includes('127.0.0.1') || API_CACHED.includes('153.80.246.80'))){
+  API_CACHED = API_DEFAULT;
+  localStorage.setItem('AON_API_BASE', API_DEFAULT);
+}
+const API_BASE=(API_FROM_URL || API_CACHED || API_DEFAULT).replace(/\/$/,'');
 let lang='ru', selected='m1', promoDiscount=0, promoCode='';
 let plans={m1:{months:1,price:2790},m3:{months:3,price:6990},m6:{months:6,price:11990},forever:{months:120,price:14990}};
 const icons=['p-cam','p-chat','p-star','p-ae','p-key','p-file','p-music','p-globe','p-pack'];
@@ -66,33 +71,75 @@ function openBotFallback(action,payload={}){const provider=payload.provider||'yo
 async function send(action,extra={},close=true){
   const payload={action,plan_id:selected,promo:qs('#promo').value.trim(),...extra};
   if(close) closeModal();
+
   if(action==='trial'){
+    if(API_BASE && tg?.initData){
+      try{
+        toast(L[lang].sent);
+        await fetch(API_BASE+'/api/trial',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({initData:tg.initData})
+        });
+        return;
+      }catch(e){}
+    }
     openBotFallback(action,payload);
     return;
   }
+
   if(!tg?.initData){
-    toast(lang==='ru'?'Открой приложение через кнопку в Telegram':'Відкрий застосунок через кнопку в Telegram');
-    openBotFallback(action,payload);
+    toast(lang==='ru'?'Открой приложение через новую кнопку /start в Telegram':'Відкрий застосунок через нову кнопку /start у Telegram');
     return;
   }
+
   if(!API_BASE){
-    openBotFallback(action,payload);
+    toast(lang==='ru'?'API backend не найден':'API backend не знайдено');
     return;
   }
+
   try{
     toast(lang==='ru'?'создаю платеж.exe':'створюю платіж.exe');
-    const r=await fetch(API_BASE+'/api/payments/create',{
+
+    const body = {
+      initData: tg.initData,
+      plan_id: selected,
+      provider: payload.provider || 'yookassa',
+      promo: payload.promo || null,
+      accepted_legal: agree === true
+    };
+
+    const r = await fetch(API_BASE + '/api/payments/create', {
       method:'POST',
+      mode:'cors',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({initData:tg.initData, plan_id:selected, provider:payload.provider, promo:payload.promo, accepted_legal:agree})
+      body:JSON.stringify(body)
     });
-    const j=await r.json();
-    if(!r.ok || !j.ok){ throw new Error(j.detail || 'payment_error'); }
-    toast(lang==='ru'?'платеж создан — проверь чат с ботом':'платіж створено — перевір чат із ботом');
-    if(j.checkout_url && tg?.openLink){ setTimeout(()=>tg.openLink(j.checkout_url), 500); }
+
+    let j = {};
+    const txt = await r.text();
+    try{ j = txt ? JSON.parse(txt) : {}; }catch(_){ j = {raw:txt}; }
+
+    if(!r.ok || j.ok === false){
+      throw new Error(j.detail || j.error || j.message || ('HTTP '+r.status));
+    }
+
+    const checkout = j.checkout_url || j.url || j.payment_url || j.pay_url;
+    if(!checkout){
+      throw new Error('backend_no_checkout_url');
+    }
+
+    toast(lang==='ru'?'платеж создан.exe':'платіж створено.exe');
+
+    setTimeout(()=>{
+      if(tg?.openLink) tg.openLink(checkout);
+      else window.open(checkout, '_blank');
+    }, 350);
+
   }catch(e){
-    toast(lang==='ru'?'ошибка платежа, открою бота.exe':'помилка платежу, відкрию бота.exe');
-    openBotFallback(action,payload);
+    console.error('PAYMENT_ERROR', e);
+    toast((lang==='ru'?'ошибка оплаты: ':'помилка оплати: ') + (e.message || 'failed'));
+    // Не отправляем старый fallback в бота — он маскировал настоящую ошибку и из-за этого было непонятно, что сломано.
   }
 }
 function openModal(){qs('#buyModal').classList.remove('hide'); qs('#buyModal').classList.add('show')}function closeModal(){const m=qs('#buyModal'); if(!m.classList.contains('show'))return; m.classList.add('hide'); setTimeout(()=>{m.classList.remove('show','hide')},240)}
